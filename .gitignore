@@ -162,3 +162,8 @@ cython_debug/
 # default output directory
 output/
 outputs/
+
+# Additional environment files
+.env.local
+.env.*.local
+*.env

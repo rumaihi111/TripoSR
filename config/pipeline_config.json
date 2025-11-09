@@ -1,0 +1,27 @@
+{
+  "blender": {
+    "executable": "blender",
+    "timeout_seconds": 300
+  },
+  "stage_2_mesh_cleanup": {
+    "remove_noise": true,
+    "noise_threshold": 0.0001,
+    "smooth_iterations": 2,
+    "smooth_factor": 0.5,
+    "fix_normals": true,
+    "recalculate_normals": true,
+    "decimate_ratio": null,
+    "auto_uv_unwrap": true,
+    "uv_method": "smart",
+    "uv_margin": 0.01,
+    "smooth_shading": true
+  },
+  "stage_3_pbr_inference": {
+    "enabled": false,
+    "placeholder": "Configuration for Stage 3 - PBR inference"
+  },
+  "stage_4_packaging": {
+    "enabled": false,
+    "placeholder": "Configuration for Stage 4 - Packaging (GLB/USD)"
+  }
+}
