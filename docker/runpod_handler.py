@@ -29,13 +29,19 @@ def encode_file_to_base64(file_path):
 def generate_pbr_textures(image_path, output_dir, texture_size=2048):
     """Generate PBR textures using GPU-accelerated OpenCV"""
     
+    print(f"  🎨 Generating PBR textures ({texture_size}x{texture_size})")
+    
     img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(f"Failed to load image: {image_path}")
+    
     img = cv2.resize(img, (texture_size, texture_size))
     
     os.makedirs(output_dir, exist_ok=True)
     textures = {}
     
     # Albedo
+    print("     → Albedo...")
     img_float = img.astype(np.float32) / 255.0
     scales = [15, 80, 250]
     msr = np.zeros_like(img_float)
@@ -49,6 +55,7 @@ def generate_pbr_textures(image_path, output_dir, texture_size=2048):
     textures['albedo'] = albedo_path
     
     # Roughness
+    print("     → Roughness...")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
     gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
@@ -60,6 +67,7 @@ def generate_pbr_textures(image_path, output_dir, texture_size=2048):
     textures['roughness'] = roughness_path
     
     # Metallic
+    print("     → Metallic...")
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     metallic = np.zeros_like(hsv[:,:,2], dtype=np.float32)
     bright = hsv[:,:,2] > 180
@@ -69,6 +77,7 @@ def generate_pbr_textures(image_path, output_dir, texture_size=2048):
     textures['metallic'] = metallic_path
     
     # Normal
+    print("     → Normal map...")
     dx = cv2.Sobel(gray.astype(np.float32), cv2.CV_32F, 1, 0, ksize=5)
     dy = cv2.Sobel(gray.astype(np.float32), cv2.CV_32F, 0, 1, ksize=5)
     normal = np.zeros((*gray.shape, 3), dtype=np.float32)
@@ -83,6 +92,7 @@ def generate_pbr_textures(image_path, output_dir, texture_size=2048):
     textures['normal'] = normal_path
     
     # AO
+    print("     → Ambient occlusion...")
     ao = 255 - gray
     ao = cv2.GaussianBlur(ao, (21, 21), 0)
     ao = cv2.normalize(ao, None, 50, 255, cv2.NORM_MINMAX)
@@ -94,15 +104,25 @@ def generate_pbr_textures(image_path, output_dir, texture_size=2048):
 
 
 def handler(job):
-    """Main handler"""
+    """Main RunPod handler - receives base64 encoded files, returns base64 results"""
     try:
+        print("\n" + "="*60)
         print("🚀 RunPod PBR Job Started")
+        print("="*60)
         start = time.time()
         
         inp = job['input']
-        image_b64 = inp['image_b64']
-        mesh_b64 = inp['mesh_b64']
+        image_b64 = inp.get('image_b64')
+        mesh_b64 = inp.get('mesh_b64')
         tex_size = inp.get('texture_size', 2048)
+        
+        if not image_b64 or not mesh_b64:
+            raise ValueError("Missing image_b64 or mesh_b64 in input")
+        
+        print(f"  📦 Decoding inputs...")
+        print(f"     Image: {len(image_b64):,} chars")
+        print(f"     Mesh: {len(mesh_b64):,} chars")
+        print(f"     Texture size: {tex_size}x{tex_size}")
         
         # Decode inputs
         temp = "/tmp/pbr_job"
@@ -111,20 +131,28 @@ def handler(job):
         img_path = f"{temp}/input.jpg"
         mesh_path = f"{temp}/input.obj"
         
-        decode_base64_to_file(image_b64, img_path)
-        decode_base64_to_file(mesh_b64, mesh_path)
+        img_kb = decode_base64_to_file(image_b64, img_path)
+        mesh_kb = decode_base64_to_file(mesh_b64, mesh_path)
+        
+        print(f"  ✓ Decoded: {img_kb:.1f} KB image, {mesh_kb:.1f} KB mesh")
         
         # Generate textures
         out_dir = f"{temp}/output"
         textures = generate_pbr_textures(img_path, out_dir, tex_size)
         
         # Encode results
+        print(f"  📤 Encoding results...")
         encoded = {}
         for name, path in textures.items():
             encoded[name] = encode_file_to_base64(path)
+            size = os.path.getsize(path) / 1024
+            print(f"     ✓ {name}.png ({size:.1f} KB)")
         
         elapsed = time.time() - start
-        print(f"✅ Complete ({elapsed:.1f}s)")
+        print(f"\n✅ Job Complete!")
+        print(f"   GPU time: {elapsed:.1f}s")
+        print(f"   Cost: ${elapsed * 0.00039:.4f}")
+        print("="*60 + "\n")
         
         return {
             "success": True,
@@ -134,12 +162,18 @@ def handler(job):
         
     except Exception as e:
         import traceback
-        print(f"❌ Error: {e}")
+        error_trace = traceback.format_exc()
+        print(f"\n❌ Error: {e}")
+        print(error_trace)
+        print("="*60 + "\n")
         return {
             "success": False,
             "error": str(e),
-            "traceback": traceback.format_exc()
+            "traceback": error_trace
         }
 
 
-runpod.serverless.start({"handler": handler})
+# Start the RunPod serverless handler
+if __name__ == "__main__":
+    print("🔧 RunPod PBR Handler Starting...")
+    runpod.serverless.start({"handler": handler})
